@@ -11,6 +11,8 @@ const unifiedBookingRoutes = require('./routes/unified-booking.routes');
 const filteredReportRoutes = require('./routes/filtered-report.routes');
 const companyBookingsRoutes = require('./routes/company-bookings.routes');
 const serviceBookingsRoutes = require('./routes/service-bookings.routes');
+const billingRoutes = require('./routes/billing.routes');
+const serviceSpecificBookingsRoutes = require('./routes/service-specific-bookings.routes');
 const { notFound, errorHandler } = require('./middleware/error.middleware');
 
 const app = express();
@@ -42,6 +44,8 @@ app.use('/api/agent/unified-bookings', unifiedBookingRoutes);
 app.use('/api/agent/report', filteredReportRoutes);
 app.use('/api/agent/company-bookings', companyBookingsRoutes);
 app.use('/api/agent/service-bookings', serviceBookingsRoutes);
+app.use('/api/agent/billing', billingRoutes);
+app.use('/api/agent', serviceSpecificBookingsRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

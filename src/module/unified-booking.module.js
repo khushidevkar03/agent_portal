@@ -4,6 +4,7 @@ const { unifiedBookingSchema } = require("../config/unified-booking.schema");
 const buildWhere = (schema, params, agentId, filters) => {
   const where = ["client.agent_id = ?"];
   params.push(agentId);
+  if (schema.assigned) where.push(`b.${schema.assigned} = 1`);
   if (schema.childKey) where.push(`(b.${schema.childKey} IS NULL OR b.${schema.childKey} = 0)`);
   if (filters.clientIds && filters.clientIds.length) {
     where.push(`b.${schema.clientId} IN (${filters.clientIds.map(() => "?").join(",")})`);
@@ -34,12 +35,13 @@ const getServiceRows = async (service, schema, agentId, filters) => {
   const params = [];
   const where = buildWhere(schema, params, agentId, filters);
   const invoiceJoin = schema.invoiceTable
-    ? `LEFT JOIN (SELECT booking_id, SUM(${schema.invoiceAmount}) AS invoiceAmount FROM ${schema.invoiceTable} GROUP BY booking_id) invoice ON invoice.booking_id = b.${schema.id}`
+    ? `INNER JOIN (SELECT booking_id, SUM(${schema.invoiceAmount}) AS invoiceAmount, SUBSTRING_INDEX(GROUP_CONCAT(${schema.invoiceStatus} ORDER BY id DESC SEPARATOR ','), ',', 1) AS invoiceStatus FROM ${schema.invoiceTable} GROUP BY booking_id) invoice ON invoice.booking_id = b.${schema.id}`
     : "";
   const traveller = schema.traveller ? `b.${schema.traveller}` : "NULL";
   const finalAmount = schema.invoiceTable
     ? `CASE WHEN b.${schema.assigned} = 1${schema.cancelled ? ` AND b.${schema.cancelled} = 0` : ""} AND COALESCE(invoice.invoiceAmount, 0) > 0 THEN invoice.invoiceAmount ELSE 0 END`
     : schema.bookingAmount ? `COALESCE(b.${schema.bookingAmount}, 0)` : "0";
+  const invoiceStatus = schema.invoiceTable ? "invoice.invoiceStatus" : schema.invoiceStatus ? `b.${schema.invoiceStatus}` : "NULL";
   const [rows] = await db.query(
     `SELECT '${service}' AS service_type, '${schema.label}' AS service_label,
       b.${schema.id} AS booking_id,
@@ -51,6 +53,7 @@ const getServiceRows = async (service, schema, agentId, filters) => {
       b.${schema.travelDate} AS travel_date,
       ${schema.route} AS route_or_destination,
       b.${schema.status} AS booking_status,
+      ${invoiceStatus} AS invoice_status,
       ${finalAmount} AS final_amount
      FROM ${schema.table} b
      INNER JOIN admins client ON client.id = b.${schema.clientId}

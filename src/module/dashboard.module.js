@@ -1,5 +1,6 @@
 const db = require("../config/env");
 const { dashboardSchema } = require("../config/dashboard.schema");
+const { getAnalytics } = require("./analytics.module");
 
 const toNumber = (value) => Number(value || 0);
 const money = (value) => Number(toNumber(value).toFixed(2));
@@ -73,6 +74,10 @@ const getDashboard = async (agentId) => {
     bookingCount: toNumber(row.totalBookings),
     spend: money(row.totalSpend),
   }));
+  const analytics = await getAnalytics(agentId);
+  data.clientWise = analytics.clientWise;
+  data.monthWise = analytics.monthlyTrend;
+  data.billing = analytics.billing;
   for (const [, row] of serviceRows) {
     data.totalBookings += toNumber(row.totalBookings);
     data.totalSpend += toNumber(row.totalSpend);

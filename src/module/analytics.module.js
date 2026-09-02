@@ -1,10 +1,11 @@
 const db = require("../config/env");
 const { dashboardSchema } = require("../config/dashboard.schema");
+const { getBillingAnalytics } = require("./billing-analytics.module");
 
 const number = (value) => Number(value || 0);
 const money = (value) => Number(number(value).toFixed(2));
 
-const getAnalytics = async (agentId) => {
+const getAnalytics = async (agentId, billingFilters = {}) => {
   const [rows] = await db.query(
     "SELECT id, corporate_name AS clientName FROM admins WHERE agent_id = ?",
     [agentId],
@@ -73,6 +74,7 @@ const getAnalytics = async (agentId) => {
       .map(([clientName, value]) => ({ clientName, ...value }))
       .sort((a, b) => b.spend - a.spend),
     bookingStatusDistribution: formatMetrics(bookingStatusDistribution),
+    billing: await getBillingAnalytics({ agentId, ...billingFilters }),
   };
 };
 

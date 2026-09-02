@@ -10,7 +10,10 @@ const verifyPassword = (input, stored) => {
   const inputBuffer = Buffer.from(String(input));
   const storedBuffer = Buffer.from(String(stored));
   if (/^[a-f0-9]{32}$/i.test(String(stored))) {
-    const legacyHash = crypto.createHash("md5").update(String(input)).digest("hex");
+    const legacyHash = crypto
+      .createHash("md5")
+      .update(String(input))
+      .digest("hex");
     return crypto.timingSafeEqual(
       Buffer.from(legacyHash),
       Buffer.from(String(stored).toLowerCase()),
@@ -36,15 +39,33 @@ const getAccessToken = async (adminId) => {
   return token;
 };
 
-const recordAudit = async ({ loginId, adminId, eventType, ipAddress, userAgent, metadata }) => {
+const recordAudit = async ({
+  loginId,
+  adminId,
+  eventType,
+  ipAddress,
+  userAgent,
+  metadata,
+}) => {
   await db.query(
     "INSERT INTO agent_portal_audit_log (login_id, admin_id, event_type, ip_address, user_agent, metadata) VALUES (?, ?, ?, ?, ?, ?)",
-    [loginId || null, adminId || null, eventType, ipAddress || null, userAgent || null, metadata ? JSON.stringify(metadata) : null],
+    [
+      loginId || null,
+      adminId || null,
+      eventType,
+      ipAddress || null,
+      userAgent || null,
+      metadata ? JSON.stringify(metadata) : null,
+    ],
   );
 };
 
 const linkReferredClient = async ({ agentId, clientId }) => {
-  if (!Number.isInteger(agentId) || !Number.isInteger(clientId) || agentId === clientId) {
+  if (
+    !Number.isInteger(agentId) ||
+    !Number.isInteger(clientId) ||
+    agentId === clientId
+  ) {
     const error = new Error("An agent cannot refer itself");
     error.statusCode = 400;
     throw error;
@@ -52,7 +73,10 @@ const linkReferredClient = async ({ agentId, clientId }) => {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const [clientRows] = await connection.query("SELECT id FROM admins WHERE id = ? FOR UPDATE", [clientId]);
+    const [clientRows] = await connection.query(
+      "SELECT id FROM admins WHERE id = ? FOR UPDATE",
+      [clientId],
+    );
     if (!clientRows[0]) {
       const error = new Error("Referred client not found");
       error.statusCode = 404;
@@ -63,11 +87,16 @@ const linkReferredClient = async ({ agentId, clientId }) => {
       [clientId, agentId],
     );
     if (cycleRows[0]) {
-      const error = new Error("This link would create a circular agent relationship");
+      const error = new Error(
+        "This link would create a circular agent relationship",
+      );
       error.statusCode = 409;
       throw error;
     }
-    await connection.query("UPDATE admins SET agent_id = ? WHERE id = ?", [agentId, clientId]);
+    await connection.query("UPDATE admins SET agent_id = ? WHERE id = ?", [
+      agentId,
+      clientId,
+    ]);
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -83,8 +112,20 @@ const login = async ({ username, password, auditContext = {} }) => {
     [username, username],
   );
   const user = rows[0];
-  const valid = user && Number(user.status) === 1 && Number(user.is_active) === 1 && Number(user.is_deleted) !== 1 && Number(user.can_access_agent_portal) === 1 && verifyPassword(password, user.password);
-  await recordAudit({ ...auditContext, loginId: user && user.id, adminId: user && user.admin_id, eventType: valid ? "LOGIN_SUCCESS" : "LOGIN_FAILED", metadata: { username } });
+  const valid =
+    user &&
+    Number(user.status) === 1 &&
+    Number(user.is_active) === 1 &&
+    Number(user.is_deleted) !== 1 &&
+    Number(user.can_access_agent_portal) === 1 &&
+    verifyPassword(password, user.password);
+  await recordAudit({
+    ...auditContext,
+    loginId: user && user.id,
+    adminId: user && user.admin_id,
+    eventType: valid ? "LOGIN_SUCCESS" : "LOGIN_FAILED",
+    metadata: { username },
+  });
   if (!valid) return null;
   return {
     id: user.id,
