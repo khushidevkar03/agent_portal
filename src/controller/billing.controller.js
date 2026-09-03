@@ -2,8 +2,8 @@ const { getBilling } = require("../module/billing.module");
 
 const billing = async (req, res, next) => {
   try {
-    const agentId = Number.parseInt(req.query.agent_id, 10);
-    const type = Number.parseInt(req.query.type, 10);
+    const agentId = Number.parseInt(req.body.agent_id, 10);
+    const type = Number.parseInt(req.body.type, 10);
     if (!Number.isInteger(agentId) || agentId <= 0) {
       return res.status(400).json({ success: false, error: "A valid agent_id is required" });
     }

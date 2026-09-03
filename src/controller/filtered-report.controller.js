@@ -6,16 +6,16 @@ const { unifiedBookingSchema } = require("../config/unified-booking.schema");
 
 const filteredReport = async (req, res, next) => {
   try {
-    const agentId = Number.parseInt(req.query.agent_id, 10);
-    const period = String(req.query.period || "all").toLowerCase();
+    const agentId = Number.parseInt(req.body.agent_id, 10);
+    const period = String(req.body.period || "all").toLowerCase();
     const dateBasis = String(
-      req.query.date_basis || "booking_date",
+      req.body.date_basis || "booking_date",
     ).toLowerCase();
-    const service = req.query.service
-      ? String(req.query.service).toLowerCase()
+    const service = req.body.service
+      ? String(req.body.service).toLowerCase()
       : undefined;
-    const clientIds = req.query.client_ids
-      ? String(req.query.client_ids)
+    const clientIds = req.body.client_ids
+      ? String(req.body.client_ids)
           .split(",")
           .map((id) => Number.parseInt(id.trim(), 10))
           .filter((id) => Number.isInteger(id) && id > 0)
@@ -35,7 +35,7 @@ const filteredReport = async (req, res, next) => {
       return res
         .status(400)
         .json({ success: false, message: "Unsupported service" });
-    const range = getPeriod(period, req.query.from, req.query.to);
+    const range = getPeriod(period, req.body.from, req.body.to);
     if (range.error)
       return res.status(400).json({ success: false, message: range.error });
     const data = await getFilteredReport({
@@ -46,8 +46,8 @@ const filteredReport = async (req, res, next) => {
       period,
       from: range.from,
       to: range.to,
-      status: req.query.status,
-      search: req.query.search,
+      status: req.body.status,
+      search: req.body.search,
     });
     res.json({ success: true, data });
   } catch (error) {

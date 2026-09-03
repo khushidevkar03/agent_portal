@@ -2,11 +2,11 @@ const { getCompanyBookings } = require("../module/company-bookings.module");
 
 const companyBookings = async (req, res, next) => {
   try {
-    const rawAdminId = req.query.admin_id;
+    const rawAdminId = req.body.admin_id;
     const adminId = rawAdminId ? Number.parseInt(rawAdminId, 10) : undefined;
-    const companyName = req.query.company_name ? String(req.query.company_name).trim() : undefined;
-    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const companyName = req.body.company_name ? String(req.body.company_name).trim() : undefined;
+    const page = Math.max(1, Number.parseInt(req.body.page, 10) || 1);
+    const requestedLimit = Number.parseInt(req.body.limit, 10);
     const allowedLimits = [10, 25, 50, 100];
     const limit = requestedLimit || 10;
     if ((!adminId || adminId <= 0) && !companyName) {

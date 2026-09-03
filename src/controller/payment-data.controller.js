@@ -1,6 +1,6 @@
-const { getDashboard } = require("../module/dashboard.module");
+const { getPaymentData } = require("../module/payment-data.module");
 
-const dashboard = async (req, res, next) => {
+const paymentData = async (req, res, next) => {
   try {
     const agentId = Number.parseInt(req.body.agent_id, 10);
     if (!Number.isInteger(agentId) || agentId <= 0) {
@@ -9,11 +9,11 @@ const dashboard = async (req, res, next) => {
         message: "A valid agent_id is required",
       });
     }
-    const data = await getDashboard(agentId);
+    const data = await getPaymentData(agentId);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
   }
 };
 
-module.exports = { dashboard };
+module.exports = { paymentData };

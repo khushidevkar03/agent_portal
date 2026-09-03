@@ -3,9 +3,9 @@ const { unifiedBookingSchema } = require("../config/unified-booking.schema");
 
 const unifiedBookings = async (req, res, next) => {
   try {
-    const agentId = Number.parseInt(req.query.agent_id, 10);
-    const service = req.query.service
-      ? String(req.query.service).toLowerCase()
+    const agentId = Number.parseInt(req.body.agent_id, 10);
+    const service = req.body.service
+      ? String(req.body.service).toLowerCase()
       : undefined;
     if (!Number.isInteger(agentId) || agentId <= 0) {
       return res
@@ -20,9 +20,9 @@ const unifiedBookings = async (req, res, next) => {
     const result = await getUnifiedBookings({
       agentId,
       service,
-      from: req.query.from,
-      to: req.query.to,
-      status: req.query.status,
+      from: req.body.from,
+      to: req.body.to,
+      status: req.body.status,
     });
     const BookingsCount = result.length;
     res.json({ success: true, BookingsCount,...result });

@@ -5,9 +5,9 @@ const { getBillingAnalytics } = require("./billing-analytics.module");
 const number = (value) => Number(value || 0);
 const money = (value) => Number(number(value).toFixed(2));
 
-const getAnalytics = async (agentId, billingFilters = {}) => {
+const getAnalytics = async (agentId, billingFilters = {}, options = {}) => {
   const [rows] = await db.query(
-    "SELECT id, corporate_name AS clientName FROM admins WHERE agent_id = ?",
+    "SELECT id, corporate_name AS clientName, is_active AS isActive FROM admins WHERE agent_id = ?",
     [agentId],
   );
   const clientNames = Object.fromEntries(rows.map((row) => [row.id, row.clientName || `Client ${row.id}`]));
@@ -22,6 +22,8 @@ const getAnalytics = async (agentId, billingFilters = {}) => {
       `SELECT '${service}' AS service, b.${schema.id} AS bookingId,
         b.${schema.bookedAt} AS bookingDate, b.${schema.status} AS bookingStatus,
         b.admin_id AS clientId, a.corporate_name AS clientName,
+        ${schema.isAssign ? `b.${schema.isAssign}` : "NULL"} AS isAssigned,
+        ${schema.isCancelled ? `b.${schema.isCancelled}` : "NULL"} AS isCancelled,
         ${spend} AS spend
        FROM ${schema.table} b
        INNER JOIN admins a ON a.id = b.admin_id AND a.agent_id = ?
@@ -36,7 +38,11 @@ const getAnalytics = async (agentId, billingFilters = {}) => {
   );
   const clientWise = {};
   const monthlyTrend = {};
-  const bookingStatusDistribution = {};
+  const dashboardWise = {};
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  // const bookingStatusDistribution = {};
   for (const booking of serviceRows.flat()) {
     const amount = number(booking.spend);
     const service = booking.service;
@@ -57,25 +63,50 @@ const getAnalytics = async (agentId, billingFilters = {}) => {
     monthlyTrend[month].bookingCount += 1;
     monthlyTrend[month].spend += amount;
 
-    if (!bookingStatusDistribution[status]) bookingStatusDistribution[status] = { bookingCount: 0, spend: 0 };
-    bookingStatusDistribution[status].bookingCount += 1;
-    bookingStatusDistribution[status].spend += amount;
+    if (!dashboardWise[service]) {
+      dashboardWise[service] = {
+        totalBookings: 0,
+        totalSpend: 0,
+        confirmedBookings: 0,
+        cancelledBookings: 0,
+        currentMonthBookings: 0,
+        currentMonthSpend: 0,
+      };
+    }
+    const summary = dashboardWise[service];
+    summary.totalBookings += 1;
+    summary.totalSpend += amount;
+    if (Number(booking.isAssigned) === 1) summary.confirmedBookings += 1;
+    if (Number(booking.isCancelled) === 1) summary.cancelledBookings += 1;
+    if (date && date >= monthStart && date < nextMonthStart) {
+      summary.currentMonthBookings += 1;
+      summary.currentMonthSpend += amount;
+    }
   }
+
+  //   if (!bookingStatusDistribution[status]) bookingStatusDistribution[status] = { bookingCount: 0, spend: 0 };
+  //   bookingStatusDistribution[status].bookingCount += 1;
+  //   bookingStatusDistribution[status].spend += amount;
+  // }
 
   const formatMetrics = (metrics) => Object.fromEntries(
     Object.entries(metrics).map(([key, value]) => [key, { bookingCount: value.bookingCount, spend: money(value.spend) }]),
   );
   const formattedClients = formatMetrics(clientWise);
-  return {
+  const result = {
     serviceWise: formatMetrics(serviceWise),
     clientWise: formattedClients,
     monthlyTrend: formatMetrics(monthlyTrend),
     topClientsBySpend: Object.entries(formattedClients)
       .map(([clientName, value]) => ({ clientName, ...value }))
       .sort((a, b) => b.spend - a.spend),
-    bookingStatusDistribution: formatMetrics(bookingStatusDistribution),
     billing: await getBillingAnalytics({ agentId, ...billingFilters }),
   };
+  if (options.includeDashboardData) {
+    result.dashboardWise = dashboardWise;
+    result.clientDirectory = rows;
+  }
+  return result;
 };
 
 module.exports = { getAnalytics };
