@@ -1,6 +1,8 @@
 const db = require("../config/env");
 const { dashboardSchema } = require("../config/dashboard.schema");
 const { getBillingAnalytics } = require("./billing-analytics.module");
+const { addAprilFilter } = require("../config/reporting-period");
+const { APRIL_2026_START, getAprilToNowRange } = require("../config/reporting-period");
 
 const number = (value) => Number(value || 0);
 const money = (value) => Number(number(value).toFixed(2));
@@ -18,6 +20,9 @@ const getAnalytics = async (agentId, billingFilters = {}, options = {}) => {
     const spend = schema.invoiceTable && schema.isAssign
       ? `CASE WHEN b.${schema.isAssign} = 1 THEN COALESCE(i.spend, 0) ELSE 0 END`
       : "0";
+    const params = [agentId];
+    const where = ["a.agent_id = ?"];
+    addAprilFilter(where, params, schema.bookedAt);
     const [bookings] = await db.query(
       `SELECT '${service}' AS service, b.${schema.id} AS bookingId,
         b.${schema.bookedAt} AS bookingDate, b.${schema.status} AS bookingStatus,
@@ -26,9 +31,10 @@ const getAnalytics = async (agentId, billingFilters = {}, options = {}) => {
         ${schema.isCancelled ? `b.${schema.isCancelled}` : "NULL"} AS isCancelled,
         ${spend} AS spend
        FROM ${schema.table} b
-       INNER JOIN admins a ON a.id = b.admin_id AND a.agent_id = ?
-       ${invoiceJoin}`,
-      [agentId],
+       INNER JOIN admins a ON a.id = b.admin_id
+       ${invoiceJoin}
+       WHERE ${where.join(" AND ")}`,
+      params,
     );
     return bookings;
   }));
@@ -39,9 +45,8 @@ const getAnalytics = async (agentId, billingFilters = {}, options = {}) => {
   const clientWise = {};
   const monthlyTrend = {};
   const dashboardWise = {};
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthStart = new Date(`${APRIL_2026_START}T00:00:00`);
+  const nextMonthStart = getAprilToNowRange().end;
   // const bookingStatusDistribution = {};
   for (const booking of serviceRows.flat()) {
     const amount = number(booking.spend);
@@ -93,14 +98,20 @@ const getAnalytics = async (agentId, billingFilters = {}, options = {}) => {
     Object.entries(metrics).map(([key, value]) => [key, { bookingCount: value.bookingCount, spend: money(value.spend) }]),
   );
   const formattedClients = formatMetrics(clientWise);
+  const billing = await getBillingAnalytics({ agentId, ...billingFilters });
+  const topClientsBySpend = Object.entries(billing.clientWise)
+    .map(([clientName, value]) => ({
+      clientName,
+      bookingCount: formattedClients[clientName]?.bookingCount || 0,
+      spend: money(value.totalUnbilled + value.totalBilled),
+    }))
+    .sort((a, b) => b.spend - a.spend);
   const result = {
     serviceWise: formatMetrics(serviceWise),
     clientWise: formattedClients,
     monthlyTrend: formatMetrics(monthlyTrend),
-    topClientsBySpend: Object.entries(formattedClients)
-      .map(([clientName, value]) => ({ clientName, ...value }))
-      .sort((a, b) => b.spend - a.spend),
-    billing: await getBillingAnalytics({ agentId, ...billingFilters }),
+    topClientsBySpend,
+    billing,
   };
   if (options.includeDashboardData) {
     result.dashboardWise = dashboardWise;

@@ -1,5 +1,6 @@
 const db = require("../config/env");
 const { recentActivitySchema } = require("../config/recent-activity.schema");
+const { addAprilFilter } = require("../config/reporting-period");
 
 const getCompany = async ({ adminId, companyName }) => {
   if (adminId) {
@@ -32,6 +33,9 @@ const getCompanyBookings = async ({ adminId, companyName, page = 1, limit = 50 }
     const drop = schema.drop ? `b.${schema.drop}` : "NULL";
     const location = schema.location ? `b.${schema.location}` : "NULL";
     const passenger = schema.passenger ? `b.${schema.passenger}` : "NULL";
+    const params = [company.id];
+    const where = ["b.admin_id = ?"];
+    addAprilFilter(where, params, schema.bookingDate);
     const [rows] = await db.query(
       `SELECT b.${schema.id} AS booking_id,
         COALESCE(b.${schema.reference}, b.${schema.id}) AS reference_no,
@@ -46,15 +50,18 @@ const getCompanyBookings = async ({ adminId, companyName, page = 1, limit = 50 }
        FROM ${schema.table} b
        INNER JOIN admins a ON a.id = b.admin_id
        ${invoiceJoin}
-       WHERE b.admin_id = ?
+       WHERE ${where.join(" AND ")}
        ORDER BY b.${schema.bookingDate} DESC
        LIMIT ?`,
-      [company.id, perServiceLimit],
+      [...params, perServiceLimit],
     );
+    const countParams = [company.id];
+    const countWhere = ["b.admin_id = ?"];
+    addAprilFilter(countWhere, countParams, schema.bookingDate);
     const [countRows] = await db.query(
       `SELECT COUNT(DISTINCT b.${schema.id}) AS total
-       FROM ${schema.table} b WHERE b.admin_id = ?`,
-      [company.id],
+       FROM ${schema.table} b WHERE ${countWhere.join(" AND ")}`,
+      countParams,
     );
     return { rows, total: Number(countRows[0].total || 0) };
   }));

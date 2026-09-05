@@ -15,8 +15,8 @@ const getDashboard = async (agentId) => {
     activeReferredClients: clients.filter((client) => Number(client.isActive) === 1).length,
     totalBookings: 0,
     totalSpend: 0,
-    confirmedBookings: 0,
-    cancelledBookings: 0,
+    // confirmedBookings: 0,
+    // cancelledBookings: 0,
     currentMonthBookings: 0,
     currentMonthSpend: 0,
   };
@@ -31,8 +31,8 @@ const getDashboard = async (agentId) => {
   for (const row of Object.values(analytics.dashboardWise)) {
     data.totalBookings += toNumber(row.totalBookings);
     data.totalSpend += toNumber(row.totalSpend);
-    data.confirmedBookings += toNumber(row.confirmedBookings);
-    data.cancelledBookings += toNumber(row.cancelledBookings);
+    // data.confirmedBookings += toNumber(row.confirmedBookings);
+    // data.cancelledBookings += toNumber(row.cancelledBookings);
     data.currentMonthBookings += toNumber(row.currentMonthBookings);
     data.currentMonthSpend += toNumber(row.currentMonthSpend);
   }

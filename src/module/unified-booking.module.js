@@ -1,5 +1,9 @@
 const db = require("../config/env");
 const { unifiedBookingSchema } = require("../config/unified-booking.schema");
+const { addAprilFilter } = require("../config/reporting-period");
+
+const UNBILLED_INVOICE_STATUSES = new Set([1, 2, 3, 6, 7, 9]);
+const BILLED_INVOICE_STATUSES = new Set([4, 5]);
 
 const buildWhere = (schema, params, agentId, filters) => {
   const where = ["client.agent_id = ?"];
@@ -11,6 +15,7 @@ const buildWhere = (schema, params, agentId, filters) => {
     params.push(...filters.clientIds);
   }
   const dateColumn = filters.dateBasis === "travel_date" ? schema.travelDate : schema.bookingDate;
+  addAprilFilter(where, params, dateColumn);
   if (filters.from) {
     where.push(`b.${dateColumn} >= ?`);
     params.push(filters.from);
@@ -35,7 +40,15 @@ const getServiceRows = async (service, schema, agentId, filters) => {
   const params = [];
   const where = buildWhere(schema, params, agentId, filters);
   const invoiceJoin = schema.invoiceTable
-    ? `INNER JOIN (SELECT booking_id, SUM(${schema.invoiceAmount}) AS invoiceAmount, SUBSTRING_INDEX(GROUP_CONCAT(${schema.invoiceStatus} ORDER BY id DESC SEPARATOR ','), ',', 1) AS invoiceStatus FROM ${schema.invoiceTable} GROUP BY booking_id) invoice ON invoice.booking_id = b.${schema.id}`
+    ? `INNER JOIN (
+         SELECT booking_id,
+           SUM(${schema.invoiceAmount}) AS invoiceAmount,
+           SUBSTRING_INDEX(GROUP_CONCAT(${schema.invoiceStatus} ORDER BY id DESC SEPARATOR ','), ',', 1) AS invoiceStatus,
+           SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(is_paid, 0) ORDER BY id DESC SEPARATOR ','), ',', 1) AS isPaid
+         FROM ${schema.invoiceTable}
+         WHERE is_cancelled = 0 OR is_cancelled IS NULL
+         GROUP BY booking_id
+       ) invoice ON invoice.booking_id = b.${schema.id}`
     : "";
   const traveller = schema.traveller ? `b.${schema.traveller}` : "NULL";
   const finalAmount = schema.invoiceTable
@@ -54,6 +67,7 @@ const getServiceRows = async (service, schema, agentId, filters) => {
       ${schema.route} AS route_or_destination,
       b.${schema.status} AS booking_status,
       ${invoiceStatus} AS invoice_status,
+      ${schema.invoiceTable ? "invoice.isPaid" : "NULL"} AS is_paid,
       ${finalAmount} AS final_amount
      FROM ${schema.table} b
      INNER JOIN admins client ON client.id = b.${schema.clientId}
@@ -71,8 +85,26 @@ const getUnifiedBookings = async ({ agentId, service, from, to, status, dateBasi
     getServiceRows(name, schema, agentId, { from, to, status, dateBasis, clientIds, search })));
   const data = batches.flat()
     .sort((a, b) => new Date(b.booking_date || 0) - new Date(a.booking_date || 0))
-    .map((row) => ({ ...row, final_amount: Number(Number(row.final_amount || 0).toFixed(2)) }));
-  return { data, count: data.length };
+    .map((row) => ({
+      ...row,
+      invoice_status: row.invoice_status == null ? null : Number(row.invoice_status),
+      is_paid: row.is_paid == null ? null : Number(row.is_paid),
+      final_amount: Number(Number(row.final_amount || 0).toFixed(2)),
+    }));
+
+  const unbilled = data.filter((row) => UNBILLED_INVOICE_STATUSES.has(row.invoice_status));
+  const billed = data.filter((row) => BILLED_INVOICE_STATUSES.has(row.invoice_status));
+  const paid = data.filter((row) => row.is_paid === 1);
+
+  return {
+    data,
+    count: data.length,
+    billing: {
+      unbilled,
+      billed,
+      paid,
+    },
+  };
 };
 
 module.exports = { getUnifiedBookings };

@@ -24,7 +24,7 @@ const unifiedBookings = async (req, res, next) => {
       to: req.body.to,
       status: req.body.status,
     });
-    const BookingsCount = result.length;
+    const BookingsCount = result.count;
     res.json({ success: true, BookingsCount,...result });
   } catch (error) {
     next(error);

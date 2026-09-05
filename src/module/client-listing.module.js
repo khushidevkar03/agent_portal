@@ -1,5 +1,6 @@
 const db = require("../config/env");
 const { clientListingSchema } = require("../config/client-listing.schema");
+const { addAprilFilter } = require("../config/reporting-period");
 
 const money = (value) => Number(Number(value || 0).toFixed(2));
 
@@ -22,13 +23,16 @@ const getClientListing = async (agentId) => {
     const spend = schema.invoiceTable && schema.assigned
       ? `CASE WHEN b.${schema.assigned} = 1 THEN COALESCE(i.spend, 0) ELSE 0 END`
       : "0";
+    const params = [...ids];
+    const where = [`b.admin_id IN (${placeholders})`];
+    addAprilFilter(where, params, schema.bookedAt);
     const [rows] = await db.query(
       `SELECT b.admin_id AS adminId, COUNT(DISTINCT b.${schema.id}) AS bookingCount,
         COALESCE(SUM(${spend}), 0) AS spend, MAX(b.${schema.bookedAt}) AS lastBookingDate
        FROM ${schema.table} b ${invoiceJoin}
-       WHERE b.admin_id IN (${placeholders})
+       WHERE ${where.join(" AND ")}
        GROUP BY b.admin_id`,
-      ids,
+      params,
     );
     return [service, rows];
   }));

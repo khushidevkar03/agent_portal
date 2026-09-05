@@ -1,4 +1,5 @@
 const db = require("../config/env");
+const { getAprilToNowRange } = require("../config/reporting-period");
 
 const money = (value) => Number(Number(value || 0).toFixed(2));
 
@@ -30,7 +31,9 @@ const formatBuckets = (map) => Object.fromEntries(
 const getBillingAnalytics = async ({ agentId, adminId, month }) => {
   const serviceRows = await Promise.all(Object.entries(billingSchemas).map(async ([service, schema]) => {
     const params = [agentId];
-    const where = ["b.is_deleted = 0", "client.agent_id = ?"];
+    const where = ["b.is_deleted = 0", "client.agent_id = ?", `b.${schema.date} >= ?`, `b.${schema.date} < ?`];
+    const range = getAprilToNowRange();
+    params.push(range.start, range.end);
     if (adminId) {
       where.push("b.admin_id = ?");
       params.push(adminId);
@@ -45,9 +48,15 @@ const getBillingAnalytics = async ({ agentId, adminId, month }) => {
         b.admin_id AS clientId,
         client.corporate_name AS clientName,
         DATE_FORMAT(b.${schema.date}, '%Y-%m-%d') AS serviceDate,
-        CASE WHEN inv.invoiceStatus IN (6, 9) THEN 'unbilled' ELSE 'billed' END AS billState,
+        CASE
+          WHEN inv.invoiceStatus IN (1, 2, 3, 6, 7, 9) THEN 'unbilled'
+          WHEN inv.invoiceStatus IN (4, 5) THEN 'billed'
+          ELSE 'ignored'
+        END AS billState,
         COALESCE(inv.invoiceAmount, 0) AS payableAmount,
-        COALESCE(bo.payment_amount_received, 0) AS paymentReceived,
+        CASE WHEN inv.invoiceStatus IN (4, 5)
+          THEN COALESCE(bo.payment_amount_received, 0)
+          ELSE 0 END AS paymentReceived,
         CAST(inv.invoiceStatus AS CHAR) AS invoiceStatus
        FROM ${schema.table} b
        INNER JOIN admins client ON client.id = b.admin_id
@@ -55,7 +64,8 @@ const getBillingAnalytics = async ({ agentId, adminId, month }) => {
          SELECT booking_id, status AS invoiceStatus, bill_id,
            SUM(sub_total - COALESCE(${schema.taxExFees}, 0)) AS invoiceAmount
          FROM ${schema.invoiceTable}
-         WHERE is_cancelled = 0 OR is_cancelled IS NULL
+         WHERE (is_cancelled = 0 OR is_cancelled IS NULL)
+           AND status IN (1, 2, 3, 4, 5, 6, 7, 9)
          GROUP BY booking_id, status, bill_id
        ) inv ON inv.booking_id = b.id
        LEFT JOIN bills_offline bo ON bo.id = inv.bill_id AND bo.is_deleted = 0
@@ -88,6 +98,7 @@ const getBillingAnalytics = async ({ agentId, adminId, month }) => {
       if (!map[key]) map[key] = createBucket();
       addToBucket(map[key], row);
     }
+    if (row.billState === "ignored") continue;
     const stateMap = row.billState === "unbilled" ? unbilledServiceWise : billedServiceWise;
     if (!stateMap[row.service]) stateMap[row.service] = createBucket();
     addToBucket(stateMap[row.service], row);

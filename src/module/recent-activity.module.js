@@ -1,5 +1,6 @@
 const db = require("../config/env");
 const { recentActivitySchema } = require("../config/recent-activity.schema");
+const { addAprilFilter } = require("../config/reporting-period");
 
 const getRecentActivity = async (agentId, limit) => {
   const queries = Object.entries(recentActivitySchema).map(async ([service, schema]) => {
@@ -15,6 +16,9 @@ const getRecentActivity = async (agentId, limit) => {
     const drop = schema.drop ? `b.${schema.drop}` : "NULL";
     const location = schema.location ? `b.${schema.location}` : "NULL";
     const passenger = schema.passenger ? `b.${schema.passenger}` : "NULL";
+    const params = [agentId];
+    const where = [];
+    addAprilFilter(where, params, schema.bookingDate);
     const [rows] = await db.query(
       `SELECT b.${schema.id} AS booking_id,
         b.${schema.reference} AS reference_no,
@@ -29,11 +33,12 @@ const getRecentActivity = async (agentId, limit) => {
         b.${schema.status} AS status,
         ${finalAmount} AS final_amount
        FROM ${schema.table} b
-       INNER JOIN admins a ON a.id = b.admin_id AND a.agent_id = ?
+       INNER JOIN admins a ON a.id = b.admin_id
        ${invoiceJoin}
+       WHERE ${where.join(" AND ")}
        ORDER BY b.${schema.bookingDate} DESC
        LIMIT ?`,
-      [agentId, limit],
+      [...params, limit],
     );
     return rows;
   });
