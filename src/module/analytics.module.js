@@ -99,12 +99,16 @@ const getAnalytics = async (agentId, billingFilters = {}, options = {}) => {
   );
   const formattedClients = formatMetrics(clientWise);
   const billing = await getBillingAnalytics({ agentId, ...billingFilters });
-  const topClientsBySpend = Object.entries(billing.clientWise)
-    .map(([clientName, value]) => ({
-      clientName,
-      bookingCount: formattedClients[clientName]?.bookingCount || 0,
-      spend: money(value.totalUnbilled + value.totalBilled),
-    }))
+  const topClientsBySpend = rows
+    .map((client) => {
+      const clientName = client.clientName || `Client ${client.id}`;
+      const billingClient = billing.clientWise?.[clientName];
+      return {
+        clientName,
+        bookingCount: formattedClients[clientName]?.bookingCount || 0,
+        spend: money((billingClient?.totalUnbilled || 0) + (billingClient?.totalBilled || 0)),
+      };
+    })
     .sort((a, b) => b.spend - a.spend);
   const result = {
     serviceWise: formatMetrics(serviceWise),
