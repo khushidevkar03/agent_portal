@@ -40,7 +40,7 @@ const signIn = async (req, res, next) => {
 
 const referClient = async (req, res, next) => {
   try {
-    const clientId = Number.parseInt(req.params.clientId, 10);
+    const clientId = Number.parseInt(req.body.client_id, 10);
     await linkReferredClient({ agentId: req.agent.adminId, clientId });
     res.json({ success: true, message: "Client linked to agent successfully" });
   } catch (e) { next(e); }

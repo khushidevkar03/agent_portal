@@ -4,5 +4,5 @@ const { authenticateAgent } = require('../middleware/agent-auth.middleware');
 
 const router = express.Router();
 router.post('/login', signIn);
-router.post('/clients/:clientId/agent', authenticateAgent, referClient);
+router.post('/clients/agent', authenticateAgent, referClient);
 module.exports = router;

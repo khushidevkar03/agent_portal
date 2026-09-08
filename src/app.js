@@ -1,4 +1,5 @@
 const express = require('express');
+const fileUpload = require('express-fileupload');
 const cors = require('cors');
 const db = require('./config/env');
 const healthRoutes = require('./routes/health.routes');
@@ -21,12 +22,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(fileUpload({
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB limit
+  abortOnLimit: true,
+  responseOnLimit: 'File size limit has been reached',
+}));
 
-app.get('/', (req, res) => {
+app.post('/', (req, res) => {
   res.json({ message: 'AgentPortal Cotrav API is running' });
 });
 
-app.get('/api/test-db', async (req, res) => {
+app.post('/api/test-db', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT 1 AS test');
     res.json({ success: true, message: 'MySQL connected successfully', data: rows });
