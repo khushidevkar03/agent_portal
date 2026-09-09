@@ -25,6 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB limit
   abortOnLimit: true,
+  abortOnLimit: true,
   responseOnLimit: 'File size limit has been reached',
 }));
 

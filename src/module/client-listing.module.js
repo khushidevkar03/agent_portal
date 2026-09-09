@@ -18,10 +18,17 @@ const getClientListing = async (agentId) => {
   const placeholders = ids.map(() => "?").join(",");
   const serviceResults = await Promise.all(Object.entries(clientListingSchema).map(async ([service, schema]) => {
     const invoiceJoin = schema.invoiceTable
-      ? `LEFT JOIN (SELECT booking_id, SUM(${schema.invoiceAmount}) AS spend FROM ${schema.invoiceTable} GROUP BY booking_id) i ON i.booking_id = b.${schema.id}`
+      ? `LEFT JOIN (
+          SELECT booking_id,
+            SUM(${schema.invoiceAmount} - COALESCE(${schema.taxExFees}, 0)) AS spend
+          FROM ${schema.invoiceTable}
+          WHERE (is_cancelled = 0 OR is_cancelled IS NULL)
+            AND status IN (1, 2, 3, 4, 5, 6, 7, 9)
+          GROUP BY booking_id
+        ) i ON i.booking_id = b.${schema.id}`
       : "";
-    const spend = schema.invoiceTable && schema.assigned
-      ? `CASE WHEN b.${schema.assigned} = 1 THEN COALESCE(i.spend, 0) ELSE 0 END`
+    const spend = schema.invoiceTable
+      ? `CASE WHEN b.is_deleted = 0 THEN COALESCE(i.spend, 0) ELSE 0 END`
       : "0";
     const params = [...ids];
     const where = [`b.admin_id IN (${placeholders})`];

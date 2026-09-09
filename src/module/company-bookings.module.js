@@ -17,11 +17,10 @@ const getCompany = async ({ adminId, companyName }) => {
   return rows[0];
 };
 
-const getCompanyBookings = async ({ adminId, companyName, page = 1, limit = 50 }) => {
+const getCompanyBookings = async ({ adminId, companyName }) => {
   const company = await getCompany({ adminId, companyName });
   if (!company) return { company: null, bookings: [] };
 
-  const perServiceLimit = page * limit;
   const batches = await Promise.all(Object.entries(recentActivitySchema).map(async ([service, schema]) => {
     const invoiceJoin = schema.invoiceTable
       ? `LEFT JOIN (SELECT booking_id, SUM(${schema.amount}) AS finalAmount FROM ${schema.invoiceTable} GROUP BY booking_id) i ON i.booking_id = b.${schema.id}`
@@ -46,14 +45,13 @@ const getCompanyBookings = async ({ adminId, companyName, page = 1, limit = 50 }
         b.${schema.travelDate} AS travel_date,
         ${pickup} AS pickup_location, ${drop} AS drop_location, ${location} AS location,
         b.${schema.status} AS booking_status,
-        ${finalAmount} AS final_amount
+       ${finalAmount} AS final_amount
        FROM ${schema.table} b
        INNER JOIN admins a ON a.id = b.admin_id
        ${invoiceJoin}
        WHERE ${where.join(" AND ")}
-       ORDER BY b.${schema.bookingDate} DESC
-       LIMIT ?`,
-      [...params, perServiceLimit],
+       ORDER BY b.${schema.bookingDate} DESC`,
+      params,
     );
     const countParams = [company.id];
     const countWhere = ["b.admin_id = ?"];
@@ -66,10 +64,8 @@ const getCompanyBookings = async ({ adminId, companyName, page = 1, limit = 50 }
     return { rows, total: Number(countRows[0].total || 0) };
   }));
 
-  const offset = (page - 1) * limit;
   const bookings = batches.flatMap((batch) => batch.rows)
     .sort((a, b) => new Date(b.booking_date || 0) - new Date(a.booking_date || 0))
-    .slice(offset, offset + limit)
     .map((row) => ({ ...row, final_amount: Number(Number(row.final_amount || 0).toFixed(2)) }));
   return { company, bookings, totalBookings: batches.reduce((total, batch) => total + batch.total, 0) };
 };
