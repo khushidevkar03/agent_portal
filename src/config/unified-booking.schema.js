@@ -8,7 +8,7 @@ const unifiedBookingSchema = {
     clientId: "admin_id", bookingDate: "booking_date", travelDate: "pickup_datetime",
     route: "CONCAT_WS(' - ', CONVERT(b.pickup_location USING utf8mb4), CONVERT(b.drop_city_name USING utf8mb4))", traveller: "passenger_details",
     status: "status", invoiceTable: "invoice", invoiceAmount: "sub_total", invoiceFees: "taxivaxi_tax_charge", invoiceExtraFees: "tax", invoiceStatus: "status",
-    assigned: "is_assign", cancelled: null, childKey: "master_booking_id",
+    assigned: "is_invoice", cancelled: null, childKey: "master_booking_id",
   },
   bus: {
     label: "Bus", table: "bus_bookings", id: "id", reference: "reference_no",

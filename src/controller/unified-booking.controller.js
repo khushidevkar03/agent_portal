@@ -23,6 +23,9 @@ const unifiedBookings = async (req, res, next) => {
       from: req.body.from,
       to: req.body.to,
       status: req.body.status,
+      dateBasis: req.body.date_basis === "travel_date" ? "travel_date" : "booking_date",
+      clientIds: Array.isArray(req.body.client_ids) ? req.body.client_ids : undefined,
+      search: req.body.search,
     });
     const BookingsCount = result.count;
     res.json({ success: true, BookingsCount,...result });

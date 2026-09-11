@@ -47,13 +47,12 @@ const getServiceRows = async (service, schema, agentId, filters) => {
            SUBSTRING_INDEX(GROUP_CONCAT(${schema.invoiceStatus} ORDER BY id DESC SEPARATOR ','), ',', 1) AS invoiceStatus,
            SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(is_paid, 0) ORDER BY id DESC SEPARATOR ','), ',', 1) AS isPaid
          FROM ${schema.invoiceTable}
-         WHERE is_cancelled = 0 OR is_cancelled IS NULL
          GROUP BY booking_id
        ) invoice ON invoice.booking_id = b.${schema.id}`
     : "";
   const traveller = schema.traveller ? `b.${schema.traveller}` : "NULL";
   const finalAmount = schema.invoiceTable
-    ? `CASE WHEN b.${schema.assigned} = 1${schema.cancelled ? ` AND b.${schema.cancelled} = 0` : ""} AND COALESCE(invoice.invoiceAmount, 0) > 0 THEN invoice.invoiceAmount - COALESCE(invoice.taxiFees, 0) ELSE 0 END`
+    ? `CASE WHEN b.${schema.assigned} = 1 AND COALESCE(invoice.invoiceAmount, 0) > 0 THEN invoice.invoiceAmount - COALESCE(invoice.taxiFees, 0) ELSE 0 END`
     : schema.bookingAmount ? `COALESCE(b.${schema.bookingAmount}, 0)` : "0";
   const invoiceStatus = schema.invoiceTable ? "invoice.invoiceStatus" : schema.invoiceStatus ? `b.${schema.invoiceStatus}` : "NULL";
   const [rows] = await db.query(

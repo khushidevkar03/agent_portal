@@ -53,7 +53,7 @@ const getBillingAnalytics = async ({ agentId, adminId, month }) => {
           WHEN inv.invoiceStatus IN (4, 5) THEN 'billed'
           ELSE 'ignored'
         END AS billState,
-        ${schema.cancelled ? `CASE WHEN b.${schema.cancelled} = 0 THEN COALESCE(inv.invoiceAmount, 0) ELSE 0 END` : "COALESCE(inv.invoiceAmount, 0)"} AS payableAmount,
+        COALESCE(inv.invoiceAmount, 0) AS payableAmount,
         CASE WHEN inv.invoiceStatus IN (4, 5)
           THEN COALESCE(bo.payment_amount_received, 0)
           ELSE 0 END AS paymentReceived,
@@ -66,8 +66,7 @@ const getBillingAnalytics = async ({ agentId, adminId, month }) => {
            SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(bill_id, 0) ORDER BY id DESC SEPARATOR ','), ',', 1) AS bill_id,
            SUM(sub_total - COALESCE(${schema.taxCharge}, 0)${schema.extraCharge ? ` - COALESCE(${schema.extraCharge}, 0)` : ""}) AS invoiceAmount
          FROM ${schema.invoiceTable}
-         WHERE (is_cancelled = 0 OR is_cancelled IS NULL)
-           AND status IN (1, 2, 3, 4, 5, 6, 7, 9)
+         WHERE status IN (1, 2, 3, 4, 5, 6, 7, 9)
          GROUP BY booking_id
        ) inv ON inv.booking_id = b.id
        LEFT JOIN bills_offline bo ON bo.id = inv.bill_id AND bo.is_deleted = 0

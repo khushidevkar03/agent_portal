@@ -27,14 +27,13 @@ const getAnalytics = async (agentId, billingFilters = {}, options = {}) => {
         b.admin_id AS clientId, a.corporate_name AS clientName,
         ${schema.isAssign ? `b.${schema.isAssign}` : "NULL"} AS isAssigned,
         ${schema.isCancelled ? `b.${schema.isCancelled}` : "NULL"} AS isCancelled,
-        CASE WHEN ${schema.isCancelled ? `b.${schema.isCancelled} = 0 AND ` : ""}COALESCE(i.invoiceSubTotal, 0) > 0
+        CASE WHEN COALESCE(i.invoiceSubTotal, 0) > 0
           THEN i.invoiceSubTotal - COALESCE(i.taxiFees, 0) ELSE 0 END AS spend
        FROM (
          SELECT booking_id,
            SUM(${schema.invoiceAmount}) AS invoiceSubTotal,
            SUM(COALESCE(${schema.invoiceFees}, 0)${schema.invoiceExtraFees ? ` + COALESCE(${schema.invoiceExtraFees}, 0)` : ""}) AS taxiFees
          FROM ${schema.invoiceTable}
-         WHERE is_cancelled = 0 OR is_cancelled IS NULL
          GROUP BY booking_id
        ) i
        INNER JOIN ${schema.table} b ON b.${schema.id} = i.booking_id
