@@ -20,7 +20,8 @@ const getClientListing = async (agentId) => {
     const invoiceJoin = schema.invoiceTable
       ? `LEFT JOIN (
           SELECT booking_id,
-            SUM(${schema.invoiceAmount} - COALESCE(${schema.taxExFees}, 0)) AS spend
+            SUM(${schema.invoiceAmount} - COALESCE(${schema.invoiceFees}, 0)${schema.invoiceExtraFees ? ` - COALESCE(${schema.invoiceExtraFees}, 0)` : ""}) AS spend,
+            COUNT(*) AS invoiceCount
           FROM ${schema.invoiceTable}
           WHERE (is_cancelled = 0 OR is_cancelled IS NULL)
             AND status IN (1, 2, 3, 4, 5, 6, 7, 9)
@@ -28,13 +29,17 @@ const getClientListing = async (agentId) => {
         ) i ON i.booking_id = b.${schema.id}`
       : "";
     const spend = schema.invoiceTable
-      ? `CASE WHEN b.is_deleted = 0 THEN COALESCE(i.spend, 0) ELSE 0 END`
+      ? `CASE WHEN ${schema.cancelled ? `b.${schema.cancelled} = 0 AND ` : ""}COALESCE(i.spend, 0) > 0 THEN COALESCE(i.spend, 0) ELSE 0 END`
       : "0";
     const params = [...ids];
     const where = [`b.admin_id IN (${placeholders})`];
+    if (schema.invoiceTable) {
+      where.push(`b.${schema.assigned} = 1`, `(b.${schema.childKey} IS NULL OR b.${schema.childKey} = 0)`);
+    }
     addAprilFilter(where, params, schema.bookedAt);
     const [rows] = await db.query(
-      `SELECT b.admin_id AS adminId, COUNT(DISTINCT b.${schema.id}) AS bookingCount,
+      `SELECT b.admin_id AS adminId,
+        ${schema.invoiceTable ? `COUNT(DISTINCT b.${schema.id}) + COALESCE(SUM(i.invoiceCount), 0)` : `COUNT(DISTINCT b.${schema.id})`} AS bookingCount,
         COALESCE(SUM(${spend}), 0) AS spend, MAX(b.${schema.bookedAt}) AS lastBookingDate
        FROM ${schema.table} b ${invoiceJoin}
        WHERE ${where.join(" AND ")}
@@ -78,6 +83,7 @@ const getClientListing = async (agentId) => {
       phone: client.phone,
       mappedDate: client.mappedDate,
       accountStatus: Number(client.isDeleted) === 1 ? "deleted" : Number(client.isActive) === 1 ? "active" : "inactive",
+      bookingCount: metrics.totalBookings,
       totalBookings: metrics.totalBookings,
       totalSpend: money(metrics.totalSpend),
       lastBookingDate: metrics.lastBookingDate,

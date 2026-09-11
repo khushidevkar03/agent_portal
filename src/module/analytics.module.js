@@ -14,29 +14,35 @@ const getAnalytics = async (agentId, billingFilters = {}, options = {}) => {
   );
   const clientNames = Object.fromEntries(rows.map((row) => [row.id, row.clientName || `Client ${row.id}`]));
   const serviceRows = await Promise.all(Object.entries(dashboardSchema).map(async ([service, schema]) => {
-    const invoiceJoin = schema.invoiceTable
-      ? `LEFT JOIN (SELECT booking_id, SUM(${schema.invoiceAmount}) AS spend FROM ${schema.invoiceTable} GROUP BY booking_id) i ON i.booking_id = b.${schema.id}`
-      : "";
-    const spend = schema.invoiceTable && schema.isAssign
-      ? `CASE WHEN b.${schema.isAssign} = 1 THEN COALESCE(i.spend, 0) ELSE 0 END`
-      : "0";
+    // Analytics is invoice-driven. Bookings are joined only to resolve client and
+    // booking metadata; a booking without an invoice must not be counted.
+    if (!schema.invoiceTable) return [];
+
     const params = [agentId];
-    const where = ["a.agent_id = ?"];
+    const where = ["a.agent_id = ?", `b.${schema.isAssign} = 1`, `(b.${schema.childKey} IS NULL OR b.${schema.childKey} = 0)`];
     addAprilFilter(where, params, schema.bookedAt);
-    const [bookings] = await db.query(
+    const [invoices] = await db.query(
       `SELECT '${service}' AS service, b.${schema.id} AS bookingId,
         b.${schema.bookedAt} AS bookingDate, b.${schema.status} AS bookingStatus,
         b.admin_id AS clientId, a.corporate_name AS clientName,
         ${schema.isAssign ? `b.${schema.isAssign}` : "NULL"} AS isAssigned,
         ${schema.isCancelled ? `b.${schema.isCancelled}` : "NULL"} AS isCancelled,
-        ${spend} AS spend
-       FROM ${schema.table} b
+        CASE WHEN ${schema.isCancelled ? `b.${schema.isCancelled} = 0 AND ` : ""}COALESCE(i.invoiceSubTotal, 0) > 0
+          THEN i.invoiceSubTotal - COALESCE(i.taxiFees, 0) ELSE 0 END AS spend
+       FROM (
+         SELECT booking_id,
+           SUM(${schema.invoiceAmount}) AS invoiceSubTotal,
+           SUM(COALESCE(${schema.invoiceFees}, 0)${schema.invoiceExtraFees ? ` + COALESCE(${schema.invoiceExtraFees}, 0)` : ""}) AS taxiFees
+         FROM ${schema.invoiceTable}
+         WHERE is_cancelled = 0 OR is_cancelled IS NULL
+         GROUP BY booking_id
+       ) i
+       INNER JOIN ${schema.table} b ON b.${schema.id} = i.booking_id
        INNER JOIN admins a ON a.id = b.admin_id
-       ${invoiceJoin}
        WHERE ${where.join(" AND ")}`,
       params,
     );
-    return bookings;
+    return invoices;
   }));
 
   const serviceWise = Object.fromEntries(

@@ -43,6 +43,7 @@ const getServiceRows = async (service, schema, agentId, filters) => {
     ? `INNER JOIN (
          SELECT booking_id,
            SUM(${schema.invoiceAmount}) AS invoiceAmount,
+           SUM(COALESCE(${schema.invoiceFees}, 0)${schema.invoiceExtraFees ? ` + COALESCE(${schema.invoiceExtraFees}, 0)` : ""}) AS taxiFees,
            SUBSTRING_INDEX(GROUP_CONCAT(${schema.invoiceStatus} ORDER BY id DESC SEPARATOR ','), ',', 1) AS invoiceStatus,
            SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(is_paid, 0) ORDER BY id DESC SEPARATOR ','), ',', 1) AS isPaid
          FROM ${schema.invoiceTable}
@@ -52,7 +53,7 @@ const getServiceRows = async (service, schema, agentId, filters) => {
     : "";
   const traveller = schema.traveller ? `b.${schema.traveller}` : "NULL";
   const finalAmount = schema.invoiceTable
-    ? `CASE WHEN b.${schema.assigned} = 1${schema.cancelled ? ` AND b.${schema.cancelled} = 0` : ""} AND COALESCE(invoice.invoiceAmount, 0) > 0 THEN invoice.invoiceAmount ELSE 0 END`
+    ? `CASE WHEN b.${schema.assigned} = 1${schema.cancelled ? ` AND b.${schema.cancelled} = 0` : ""} AND COALESCE(invoice.invoiceAmount, 0) > 0 THEN invoice.invoiceAmount - COALESCE(invoice.taxiFees, 0) ELSE 0 END`
     : schema.bookingAmount ? `COALESCE(b.${schema.bookingAmount}, 0)` : "0";
   const invoiceStatus = schema.invoiceTable ? "invoice.invoiceStatus" : schema.invoiceStatus ? `b.${schema.invoiceStatus}` : "NULL";
   const [rows] = await db.query(
@@ -68,6 +69,8 @@ const getServiceRows = async (service, schema, agentId, filters) => {
       b.${schema.status} AS booking_status,
       ${invoiceStatus} AS invoice_status,
       ${schema.invoiceTable ? "invoice.isPaid" : "NULL"} AS is_paid,
+      ${schema.invoiceTable ? "invoice.invoiceAmount" : schema.bookingAmount ? `COALESCE(b.${schema.bookingAmount}, 0)` : "0"} AS sub_total,
+      ${schema.invoiceTable ? "invoice.taxiFees" : "0"} AS taxi_fees,
       ${finalAmount} AS final_amount
      FROM ${schema.table} b
      INNER JOIN admins client ON client.id = b.${schema.clientId}
@@ -89,6 +92,11 @@ const getUnifiedBookings = async ({ agentId, service, from, to, status, dateBasi
       ...row,
       invoice_status: row.invoice_status == null ? null : Number(row.invoice_status),
       is_paid: row.is_paid == null ? null : Number(row.is_paid),
+      amount: {
+        sub_total: Number(Number(row.sub_total || 0).toFixed(2)),
+        taxi_fees: Number(Number(row.taxi_fees || 0).toFixed(2)),
+        total: Number((Number(row.sub_total || 0) - Number(row.taxi_fees || 0)).toFixed(2)),
+      },
       final_amount: Number(Number(row.final_amount || 0).toFixed(2)),
     }));
 
